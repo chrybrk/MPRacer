@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include "include/global.h"
 #include "include/client.h"
 #include "include/menu.h"
@@ -35,7 +36,15 @@ network_T Server, Client;
 void HandleMenu();
 void WaitForPlayers();
 
-Rectangle players[4];
+Car players[4];
+
+// -- update player movements
+void UpdatePlayer(Car *player, float dt);
+
+// -- i haven't decided which camera movement o choose between so i have all the important ones.
+void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, int width, int height);
+void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height);
+void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height);
 
 int main(void)
 {
@@ -44,6 +53,13 @@ int main(void)
 
 	HandleMenu();
 	WaitForPlayers();
+
+	// -- setup 2d camera
+	Camera2D camera = { 0 };
+	camera.offset = (Vector2){ 0.0f, 0.0f };
+	camera.rotation = 0.0f;
+	camera.target = (Vector2){ 0, 0 };
+	camera.zoom = 1.0f;
 
 	while (!WindowShouldClose())
 	{
@@ -58,32 +74,25 @@ int main(void)
 		}
 		*/
 
-		if (IsKeyDown(KEY_W))
-			players[ID].y += 10;
+		float dt = GetFrameTime();
 
-		if (IsKeyDown(KEY_S))
-			players[ID].y -= 10;
+		UpdatePlayer(&players[ID], dt);
+		UpdateCameraCenterSmoothFollow(&camera, &players[ID], dt, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-		if (IsKeyDown(KEY_A))
-			players[ID].x += 10;
-
-		if (IsKeyDown(KEY_D))
-			players[ID].x -= 10;
-
-		packet_T packet = { 
-			ID, 
-			UPDATE, 
-			SET_POSITION, 
-			{ players[ID].x, players[ID].y }
-		};
+		packet_T packet = { ID, UPDATE, SET_POSITION, { players[ID].position.x, players[ID].position.y }, players[ID].rotation };
 		net_send(&Client, &packet, sizeof(packet_T), Server.addr);
 
 		BeginDrawing();
 		{
-			for (int i = 0; i < MaxPlayer; ++i)
+			BeginMode2D(camera);
 			{
-				DrawRectangleRec(players[i], RED);
+				for (int i = 0; i < MaxPlayer; ++i)
+				{
+					Rectangle playerRect = { players[i].position.x, players[i].position.y, players[i].rectSize.x, players[i].rectSize.y };
+					DrawRectanglePro(playerRect, players[i].origin, players[i].rotation, RED);
+				}
 			}
+			EndMode2D();
 
 			DrawFPS(20, 20);
 		}
@@ -196,4 +205,66 @@ void WaitForPlayers()
 		}
 		EndDrawing();
 	}
+}
+
+void UpdatePlayer(Car *player, float dt)
+{
+	if (IsKeyDown(KEY_W))
+		player->velocity.y += -player->acceleration * dt;
+	else if (IsKeyDown(KEY_S))
+		player->velocity.y += player->braking * dt;
+	else
+		player->velocity = Vector2Scale(player->velocity, player->friction);
+
+	if (IsKeyDown(KEY_A))
+		player->rotation += player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
+	else if (IsKeyDown(KEY_D))
+		player->rotation -= player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
+
+	player->velocity = Vector2ClampValue(player->velocity, 0, player->maxSpeed);
+	player->position.x += player->velocity.y * cosf(player->rotation * DEG2RAD);
+	player->position.y += player->velocity.y * sinf(player->rotation * DEG2RAD);
+}
+
+void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, int width, int height)
+{
+	static float minSpeed = 30;
+	static float minEffectLength = 10;
+	static float fractionSpeed = 4;
+
+	float halfW = width / 2.0f;
+	float halfH = height / 2.0f;
+	float halfPW = player->rectSize.x / 2.0f;
+	float halfPH = player->rectSize.y / 2.0f;
+
+	camera->offset = (Vector2){ halfW - halfPW, halfH - halfPH };
+
+	Vector2 diff = Vector2Subtract(player->position, camera->target);
+	float length = Vector2Length(diff);
+
+	if (length > minEffectLength)
+	{
+		float speed = fmaxf(fractionSpeed*length, minSpeed);
+		camera->target = Vector2Add(camera->target, Vector2Scale(diff, speed*delta/length));
+	}
+}
+
+void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height)
+{
+    static Vector2 bbox = { 0.2f, 0.2f };
+
+    Vector2 bboxWorldMin = GetScreenToWorld2D((Vector2){ (1 - bbox.x)*0.5f*width, (1 - bbox.y)*0.5f*height }, *camera);
+    Vector2 bboxWorldMax = GetScreenToWorld2D((Vector2){ (1 + bbox.x)*0.5f*width, (1 + bbox.y)*0.5f*height }, *camera);
+    camera->offset = (Vector2){ (1 - bbox.x)*0.5f * width, (1 - bbox.y)*0.5f*height };
+
+    if (player->position.x < bboxWorldMin.x) camera->target.x = player->position.x;
+    if (player->position.y < bboxWorldMin.y) camera->target.y = player->position.y;
+    if (player->position.x > bboxWorldMax.x) camera->target.x = bboxWorldMin.x + (player->position.x - bboxWorldMax.x);
+    if (player->position.y > bboxWorldMax.y) camera->target.y = bboxWorldMin.y + (player->position.y - bboxWorldMax.y);
+}
+
+void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height)
+{
+    camera->offset = (Vector2){ width/2.0f, height/2.0f };
+    camera->target = player->position;
 }

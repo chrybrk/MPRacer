@@ -5,6 +5,19 @@
 #include "network.h"
 #include "utils.h"
 
+typedef struct {
+	float maxSpeed;
+	float acceleration;
+	float braking;
+	float turnSpeed;
+	float friction;
+	Vector2 origin;
+	float rotation;
+	Vector2 position;
+	Vector2 velocity;
+	Vector2 rectSize;
+} Car;
+
 extern int ID;
 
 extern bool Created;
@@ -21,6 +34,6 @@ extern network_T Client;
 extern pthread_t ServerLoop;
 extern pthread_t ClientLoop;
 
-extern Rectangle players[4];
+extern Car players[4];
 
 #endif

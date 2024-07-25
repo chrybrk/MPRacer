@@ -53,9 +53,22 @@ void *client_loop(void *arg)
 					case GAME_HAS_STARTED:
 					{
 						Vector2 start_pos = { 100, 100 };
+						float rotation = 90;
 						for (int i = 0; i < MaxPlayer; ++i)
 						{
-							players[i] = (Rectangle){ start_pos.x, start_pos.y + (i * 60), 50, 50 };
+							players[i] = (Car)
+							{
+								10.0f, 
+								5.0f, 
+								6.0f, 
+								200.0f, 
+								0.99f, 
+								{ 25.0f, 0.0f },
+								rotation,  
+								start_pos, 
+								{ 0 }, 
+								{ 100, 50 }
+							};
 						}
 
 						HasStarted = true;
@@ -66,8 +79,9 @@ void *client_loop(void *arg)
 					{
 						if (buffer->id != ID)
 						{
-							players[buffer->id].x = buffer->position[0];
-							players[buffer->id].y = buffer->position[1];
+							players[buffer->id].position.x = buffer->position[0];
+							players[buffer->id].position.y = buffer->position[1];
+							players[buffer->id].rotation = buffer->rotation;
 						}
 
 						break;
@@ -81,8 +95,8 @@ void *client_loop(void *arg)
 			{
 				switch (buffer->action)
 				{
-					case KEY_W: players[buffer->id].y += 10; break;
-					case KEY_S: players[buffer->id].y -= 10; break;
+					// case KEY_W: players[buffer->id].y += 10; break;
+					// case KEY_S: players[buffer->id].y -= 10; break;
 				}
 
 				break;

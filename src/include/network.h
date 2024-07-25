@@ -41,6 +41,7 @@ typedef struct {
 	int kind;
 	int action;
 	int position[2];
+	float rotation;
 } packet_T;
 
 typedef struct {
