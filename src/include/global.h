@@ -1,6 +1,8 @@
 #ifndef __GLOBAL_H__
 #define __GLOBAL_H__
 
+#define __ANDROID__ 0
+
 #include "raylib.h"
 #include "network.h"
 #include "utils.h"
@@ -33,6 +35,11 @@ extern network_T Client;
 
 extern pthread_t ServerLoop;
 extern pthread_t ClientLoop;
+
+extern bool IsCustomKeyboardActive;
+extern int CustomLastKeyInput;
+extern char CustomLastKeyCharInput;
+extern bool hasClickedOnKey;
 
 extern Car players[4];
 

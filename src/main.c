@@ -10,9 +10,12 @@
  * - [x] After you join game, you've a window -> list of players
  * - [x] After everyone joined or more than one person, user can start the game.
  * - [x] It should locate all the players on the map.
+ * - [x] When users event, it should send each req to server (Create a buffer store req in buffer, and create thread to act).
+ * - [x] Resolve event on each player side
  *
- * - [ ] When users event, it should send each req to server (Create a buffer store req in buffer, and create thread to act).
- * - [ ] Resolve eventi on each player side
+ * Task for Friday
+ * - [ ] Custom Keyboard for android
+ * - [ ] Pre-testing on android 
 */
 
 #define WINDOW_WIDTH 800
@@ -65,15 +68,6 @@ int main(void)
 	{
 		ClearBackground(CLEAR_COLOR);
 	
-		/*
-		int key = GetKeyPressed();
-		if (key > 0)
-		{
-			packet_T packet = { ID, SET_KEY, key, { 0, 0 } };
-			net_send(&Client, &packet, sizeof(packet_T), Server.addr);
-		}
-		*/
-
 		float dt = GetFrameTime();
 
 		UpdatePlayer(&players[ID], dt);

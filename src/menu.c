@@ -128,9 +128,36 @@ void CreateEvent()
 void JoinMenu()
 {
 	Rectangle button = { 300, 350, 200, 60 };
-	DrawRectangleRounded(button, .3f, 10, RED);
 	DrawText("Enter IP: ", 150, 200, 35, RAYWHITE);
 	DrawInputBox(&IPaddrIB, true, RAYWHITE, RAYWHITE);
+
+#if __ANDROID__
+	ShowKeyboard();
+	DrawKeyboard((Vector2){ 100, 250 });
+
+	if (CustomLastKeyInput > 0)
+	{
+		if (CustomLastKeyInput == KEY_BACKSPACE)
+		{
+			IPaddrIB.index--;
+			if (IPaddrIB.index < 0) IPaddrIB.index = 0;
+
+			IPaddrIB.buffer[IPaddrIB.index] = '\0';
+		}
+		else if (CustomLastKeyInput == KEY_ENTER)
+		{
+			NotCreatedButJoinEventCalled = false;
+			return;
+		}
+		else
+		{
+			IPaddrIB.buffer[IPaddrIB.index] = CustomLastKeyCharInput;
+			IPaddrIB.index++;
+		}
+	}
+
+#else
+	DrawRectangleRounded(button, .3f, 10, RED);
 	DrawText("Join", 360, 365, 35, RAYWHITE);
 
 	if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && IPaddrIB.index > 0)
@@ -138,4 +165,5 @@ void JoinMenu()
 		NotCreatedButJoinEventCalled = false;
 		return;
 	}
+#endif
 }

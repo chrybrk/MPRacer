@@ -20,4 +20,9 @@ bool CheckMouseAndTouchCollisionRect(Rectangle _rect);
 bool CheckMouseCollideAndClicked(Rectangle _rect, int key);
 bool CheckMouseOrTouchClicked(Rectangle _rect, int key);
 
+void ShowKeyboard();
+void HideKeyboard();
+void DrawKeyboard(Vector2 startPos);
+bool IsKeyboardActive();
+
 #endif
