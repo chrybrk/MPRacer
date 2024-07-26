@@ -22,9 +22,9 @@ InputBox InitInputBox(int x, int y, int w, int h, int fontSize, int maxChar)
 	return ib;
 }
 
-void DrawInputBox(InputBox *ib, bool line, Color bg, Color fg)
+void DrawInputBox(InputBox *ib, bool alreadyFocus, bool line, Color bg, Color fg)
 {
-	if (CheckCollisionPointRec(GetMousePosition(), (Rectangle){ ib->x - 10, ib->y - 10, ib->w, ib->h }))
+	if (alreadyFocus || CheckCollisionPointRec(GetMousePosition(), (Rectangle){ ib->x - 10, ib->y - 10, ib->w, ib->h }))
 	{
 		SetMouseCursor(MOUSE_CURSOR_IBEAM);
 		int key = GetCharPressed();

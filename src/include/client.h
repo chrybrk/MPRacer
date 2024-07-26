@@ -5,5 +5,6 @@
 
 void create_network(short port, char *ip);
 void *client_loop(void *arg);
+void *client_recv(void *arg);
 
 #endif

@@ -12,7 +12,7 @@ typedef struct {
 } InputBox;
 
 InputBox InitInputBox(int x, int y, int w, int h, int fontSize, int maxChar);
-void DrawInputBox(InputBox *ib, bool line, Color bg, Color fg);
+void DrawInputBox(InputBox *ib, bool alreadyFocus, bool line, Color bg, Color fg);
 
 bool CheckTouchCollisionRect(Rectangle _rect);
 bool CheckMouseCollisionRect(Rectangle _rect);

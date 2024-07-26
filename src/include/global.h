@@ -33,8 +33,7 @@ extern InputBox IPaddrIB;
 extern network_T Server;
 extern network_T Client;
 
-extern pthread_t ServerLoop;
-extern pthread_t ClientLoop;
+extern pthread_t ServerLoop, ServerSend, ClientLoop, ClientRecv;
 
 extern bool IsCustomKeyboardActive;
 extern int CustomLastKeyInput;
@@ -42,5 +41,8 @@ extern char CustomLastKeyCharInput;
 extern bool hasClickedOnKey;
 
 extern Car players[4];
+
+extern packet_T *recvpackets[64 * 1024 * 1024];
+extern int recvpackets_index; 
 
 #endif

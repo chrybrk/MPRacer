@@ -7,6 +7,9 @@ int IDs = -1;
 struct sockaddr_in clients[4];
 unsigned int client_index = 0;
 
+packet_T *packets[64 * 1024 * 1024];
+int packetrecv_index = 0;
+
 void *server_loop(void *arg)
 {
 	network_T *network = (network_T*)arg;
@@ -69,16 +72,21 @@ void *server_loop(void *arg)
 							};
 							net_send(network, &packet, sizeof(packet_T), addr);
 						}
+
 						break;
 					}
 
 					case SET_POSITION:
 					{
+						packets[packetrecv_index] = buffer;
+						packetrecv_index++;
+						/*
 						for (int i = 0; i <= IDs; ++i)
 						{
 							struct sockaddr_in addr = clients[i];
 							net_send(network, buffer, sizeof(packet_T), addr);
 						}
+						*/
 						break;
 					}
 				}
@@ -109,5 +117,43 @@ void *server_loop(void *arg)
 			case SUCCESS:
 				break;
 		}
+	}
+
+	usleep(60);
+}
+
+void *server_tick(void *arg)
+{
+	network_T *network = (network_T*)arg;
+	struct timeval start, stop;
+	double time_interval;
+
+	while (true)
+	{
+    gettimeofday(&start, NULL);
+		printf("SERVER :: total_packets: %d\n", packetrecv_index);
+		for (int i = 0; i < packetrecv_index; ++i)
+		{
+			packet_T *buffer = packets[i];
+			if (buffer)
+			{
+				for (int i = 0; i <= IDs; ++i)
+				{
+					struct sockaddr_in addr = clients[i];
+					net_send(network, buffer, sizeof(packet_T), addr);
+				}
+			}
+		}
+		packetrecv_index = 0;
+		gettimeofday(&stop, NULL);
+		time_interval = (double) (stop.tv_usec - start.tv_usec);
+		if ((double) (stop.tv_usec - start.tv_usec) > 0) {
+				time_interval = (double) (stop.tv_usec - start.tv_usec);
+		}
+
+		if (time_interval < 0) time_interval = 4.0f;
+
+		printf("LATENCY: %f\n", time_interval);
+		usleep(time_interval);
 	}
 }

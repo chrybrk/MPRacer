@@ -105,6 +105,7 @@ void CreateEvent()
 	client_bind(&Client);
 
 	pthread_create(&ServerLoop, NULL, server_loop, &Server);
+	pthread_create(&ServerSend, NULL, server_tick, &Server);
 
 	net_send(
 			&Client, 
@@ -117,6 +118,7 @@ void CreateEvent()
 	net_recv(&Client, packet, sizeof(packet_T));
 
 	pthread_create(&ClientLoop, NULL, client_loop, &Client);
+	// pthread_create(&ClientRecv, NULL, client_recv, &Client);
 	Created = packet->kind == SUCCESS ? true : false;
 
 	if (Created)
@@ -129,7 +131,7 @@ void JoinMenu()
 {
 	Rectangle button = { 300, 350, 200, 60 };
 	DrawText("Enter IP: ", 150, 200, 35, RAYWHITE);
-	DrawInputBox(&IPaddrIB, true, RAYWHITE, RAYWHITE);
+	DrawInputBox(&IPaddrIB, true, true, RAYWHITE, RAYWHITE);
 
 #if __ANDROID__
 	ShowKeyboard();
@@ -160,7 +162,7 @@ void JoinMenu()
 	DrawRectangleRounded(button, .3f, 10, RED);
 	DrawText("Join", 360, 365, 35, RAYWHITE);
 
-	if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && IPaddrIB.index > 0)
+	if ((CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER)) && IPaddrIB.index > 0)
 	{
 		NotCreatedButJoinEventCalled = false;
 		return;

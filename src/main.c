@@ -22,6 +22,13 @@
 #define WINDOW_HEIGHT 600
 #define CLEAR_COLOR (Color){ 23, 23, 23 }
 
+Color perPlayer[4] = {
+	RED,
+	BLUE,
+	YELLOW,
+	PINK
+};
+
 int ID = -1;
 
 bool IsServer = true;
@@ -33,13 +40,16 @@ bool HasStarted = false;
 unsigned int MaxPlayer = 1;
 
 InputBox IPaddrIB;
-pthread_t ServerLoop, ClientLoop;
+pthread_t ServerLoop, ServerSend, ClientLoop, ClientRecv;
 network_T Server, Client;
 
 void HandleMenu();
 void WaitForPlayers();
 
 Car players[4];
+
+packet_T *recvpackets[64 * 1024 * 1024];
+int recvpackets_index = 0;
 
 // -- update player movements
 void UpdatePlayer(Car *player, float dt);
@@ -48,6 +58,8 @@ void UpdatePlayer(Car *player, float dt);
 void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, int width, int height);
 void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height);
 void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height);
+
+void resolve_updates();
 
 int main(void)
 {
@@ -75,6 +87,9 @@ int main(void)
 
 		packet_T packet = { ID, UPDATE, SET_POSITION, { players[ID].position.x, players[ID].position.y }, players[ID].rotation };
 		net_send(&Client, &packet, sizeof(packet_T), Server.addr);
+		// usleep(60);
+
+		resolve_updates();
 
 		BeginDrawing();
 		{
@@ -83,7 +98,7 @@ int main(void)
 				for (int i = 0; i < MaxPlayer; ++i)
 				{
 					Rectangle playerRect = { players[i].position.x, players[i].position.y, players[i].rectSize.x, players[i].rectSize.y };
-					DrawRectanglePro(playerRect, players[i].origin, players[i].rotation, RED);
+					DrawRectanglePro(playerRect, players[i].origin, players[i].rotation, perPlayer[i]);
 				}
 			}
 			EndMode2D();
@@ -93,8 +108,13 @@ int main(void)
 		EndDrawing();
 	}
 
+#if __ANDROID__
+	pthread_kill(ClientLoop, SIGUSR1);
+	if (IsServer) pthread_kill(ServerLoop, SIGUSR1);
+#else
 	pthread_cancel(ClientLoop);
 	if (IsServer) pthread_cancel(ServerLoop);
+#endif
 
 	return 0;
 }
@@ -189,7 +209,7 @@ void WaitForPlayers()
 					DrawRectangleRounded(button, .3f, 10, RED);
 					DrawText("Start", button.x + 50, button.y + 10, 35, RAYWHITE);
 
-					if (MaxPlayer > 1 && CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON))
+					if (MaxPlayer > 1 && (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_ENTER)))
 					{
 						packet_T packet = { ID, UPDATE, GAME_HAS_STARTED, { 0, 0 } };
 						net_send(&Client, &packet, sizeof(packet_T), Server.addr);
@@ -214,6 +234,53 @@ void UpdatePlayer(Car *player, float dt)
 		player->rotation += player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
 	else if (IsKeyDown(KEY_D))
 		player->rotation -= player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
+
+#if __ANDROID__
+	int buttonSize = 75;
+	Vector2 firstSideButtonStartingPosition = { 20, WINDOW_HEIGHT - (buttonSize + 40) };
+	char *firstSideButtonText[] = { "Left", "Right" };
+
+	for (int i = 0; i < sizeof(firstSideButtonText) / 8; ++i)
+	{
+		Rectangle button = { 
+			firstSideButtonStartingPosition.x + ((buttonSize + 10) * i), 
+			firstSideButtonStartingPosition.y,
+			buttonSize, buttonSize
+		};
+
+		DrawRectangleRounded(button, .2f, 10, BLACK);
+		DrawText(firstSideButtonText[i], button.x + 25, button.y + 30, 15, RAYWHITE);
+
+		if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 0)
+			player->rotation += player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
+
+		else if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 1)
+			player->rotation -= player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
+	}
+
+	Vector2 secondSideButtonStartingPosition = { WINDOW_WIDTH - 210, WINDOW_HEIGHT - (buttonSize + 40) };
+	char *secondSideButtonText[] = { "Down", "Up" };
+
+	for (int i = 0; i < sizeof(secondSideButtonText) / 8; ++i)
+	{
+		Rectangle button = { 
+			secondSideButtonStartingPosition.x + ((buttonSize + 10) * i), 
+			secondSideButtonStartingPosition.y,
+			buttonSize, buttonSize
+		};
+
+		DrawRectangleRounded(button, .2f, 10, BLACK);
+		DrawText(secondSideButtonText[i], button.x + 25, button.y + 30, 15, RAYWHITE);
+
+		if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 0)
+			player->velocity.y += player->braking * dt;
+
+		else if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 1)
+			player->velocity.y += -player->acceleration * dt;
+
+		else player->velocity = Vector2Scale(player->velocity, player->friction);
+	}
+#endif
 
 	player->velocity = Vector2ClampValue(player->velocity, 0, player->maxSpeed);
 	player->position.x += player->velocity.y * cosf(player->rotation * DEG2RAD);
@@ -245,20 +312,40 @@ void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, 
 
 void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height)
 {
-    static Vector2 bbox = { 0.2f, 0.2f };
+	static Vector2 bbox = { 0.2f, 0.2f };
 
-    Vector2 bboxWorldMin = GetScreenToWorld2D((Vector2){ (1 - bbox.x)*0.5f*width, (1 - bbox.y)*0.5f*height }, *camera);
-    Vector2 bboxWorldMax = GetScreenToWorld2D((Vector2){ (1 + bbox.x)*0.5f*width, (1 + bbox.y)*0.5f*height }, *camera);
-    camera->offset = (Vector2){ (1 - bbox.x)*0.5f * width, (1 - bbox.y)*0.5f*height };
+	Vector2 bboxWorldMin = GetScreenToWorld2D((Vector2){ (1 - bbox.x)*0.5f*width, (1 - bbox.y)*0.5f*height }, *camera);
+	Vector2 bboxWorldMax = GetScreenToWorld2D((Vector2){ (1 + bbox.x)*0.5f*width, (1 + bbox.y)*0.5f*height }, *camera);
+	camera->offset = (Vector2){ (1 - bbox.x)*0.5f * width, (1 - bbox.y)*0.5f*height };
 
-    if (player->position.x < bboxWorldMin.x) camera->target.x = player->position.x;
-    if (player->position.y < bboxWorldMin.y) camera->target.y = player->position.y;
-    if (player->position.x > bboxWorldMax.x) camera->target.x = bboxWorldMin.x + (player->position.x - bboxWorldMax.x);
-    if (player->position.y > bboxWorldMax.y) camera->target.y = bboxWorldMin.y + (player->position.y - bboxWorldMax.y);
+	if (player->position.x < bboxWorldMin.x) camera->target.x = player->position.x;
+	if (player->position.y < bboxWorldMin.y) camera->target.y = player->position.y;
+	if (player->position.x > bboxWorldMax.x) camera->target.x = bboxWorldMin.x + (player->position.x - bboxWorldMax.x);
+	if (player->position.y > bboxWorldMax.y) camera->target.y = bboxWorldMin.y + (player->position.y - bboxWorldMax.y);
 }
 
 void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height)
 {
     camera->offset = (Vector2){ width/2.0f, height/2.0f };
     camera->target = player->position;
+}
+
+void resolve_updates()
+{
+	printf("CLIENT :: total_packets: %d\n", recvpackets_index);
+	for (int i = 0; i < recvpackets_index; ++i)
+	{
+		packet_T *buffer = recvpackets[i];
+		if (buffer)
+		{
+			if (buffer->id != ID)
+			{
+				players[buffer->id].position.x = buffer->position[0];
+				players[buffer->id].position.y = buffer->position[1];
+				players[buffer->id].rotation = buffer->rotation;
+			}
+		}
+	}
+
+	recvpackets_index = 0;
 }
