@@ -3,20 +3,7 @@
 #include "include/global.h"
 #include "include/client.h"
 #include "include/menu.h"
-
-/*
- * Task for Thursday
- *
- * - [x] After you join game, you've a window -> list of players
- * - [x] After everyone joined or more than one person, user can start the game.
- * - [x] It should locate all the players on the map.
- * - [x] When users event, it should send each req to server (Create a buffer store req in buffer, and create thread to act).
- * - [x] Resolve event on each player side
- *
- * Task for Friday
- * - [ ] Custom Keyboard for android
- * - [ ] Pre-testing on android 
-*/
+#include "include/physics.h"
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -46,18 +33,19 @@ network_T Server, Client;
 void HandleMenu();
 void WaitForPlayers();
 
-Car players[4];
+Player players[4];
 
 packet_T *recvpackets[64 * 1024 * 1024];
 int recvpackets_index = 0;
 
 // -- update player movements
-void UpdatePlayer(Car *player, float dt);
+void UpdatePlayer(Player *player, float dt);
+void UpdateCar(Player *car, float deltaTime);
 
 // -- i haven't decided which camera movement o choose between so i have all the important ones.
-void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, int width, int height);
-void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height);
-void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height);
+void UpdateCameraCenterSmoothFollow(Camera2D *camera, Player *player, float delta, int width, int height);
+void UpdateCameraPlayerBoundsPush(Camera2D *camera, Player *player, float delta, int width, int height);
+void UpdateCameraCenter(Camera2D *camera, Player *player, float delta, int width, int height);
 
 void resolve_updates();
 
@@ -82,10 +70,10 @@ int main(void)
 	
 		float dt = GetFrameTime();
 
-		UpdatePlayer(&players[ID], dt);
+		UpdatePlayerPhysics(&players[ID], dt);
 		UpdateCameraCenterSmoothFollow(&camera, &players[ID], dt, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-		packet_T packet = { ID, UPDATE, SET_POSITION, { players[ID].position.x, players[ID].position.y }, players[ID].rotation };
+		packet_T packet = { ID, UPDATE, SET_POSITION, { players[ID].position.x, players[ID].position.y }, players[ID].angle };
 		net_send(&Client, &packet, sizeof(packet_T), Server.addr);
 		// usleep(60);
 
@@ -97,8 +85,10 @@ int main(void)
 			{
 				for (int i = 0; i < MaxPlayer; ++i)
 				{
-					Rectangle playerRect = { players[i].position.x, players[i].position.y, players[i].rectSize.x, players[i].rectSize.y };
-					DrawRectanglePro(playerRect, players[i].origin, players[i].rotation, perPlayer[i]);
+					Player player = players[i];
+					Vector2 carOrigin = { player.size.x / 2.0f, player.size.y / 2.0f };
+					Rectangle carRect = { player.position.x - carOrigin.x, player.position.y - carOrigin.y, player.size.x, player.size.y };
+					DrawRectanglePro(carRect, carOrigin, player.angle, perPlayer[i]);
 				}
 			}
 			EndMode2D();
@@ -221,73 +211,7 @@ void WaitForPlayers()
 	}
 }
 
-void UpdatePlayer(Car *player, float dt)
-{
-	if (IsKeyDown(KEY_W))
-		player->velocity.y += -player->acceleration * dt;
-	else if (IsKeyDown(KEY_S))
-		player->velocity.y += player->braking * dt;
-	else
-		player->velocity = Vector2Scale(player->velocity, player->friction);
-
-	if (IsKeyDown(KEY_A))
-		player->rotation += player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
-	else if (IsKeyDown(KEY_D))
-		player->rotation -= player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
-
-#if __ANDROID__
-	int buttonSize = 75;
-	Vector2 firstSideButtonStartingPosition = { 20, WINDOW_HEIGHT - (buttonSize + 40) };
-	char *firstSideButtonText[] = { "Left", "Right" };
-
-	for (int i = 0; i < sizeof(firstSideButtonText) / 8; ++i)
-	{
-		Rectangle button = { 
-			firstSideButtonStartingPosition.x + ((buttonSize + 10) * i), 
-			firstSideButtonStartingPosition.y,
-			buttonSize, buttonSize
-		};
-
-		DrawRectangleRounded(button, .2f, 10, BLACK);
-		DrawText(firstSideButtonText[i], button.x + 25, button.y + 30, 15, RAYWHITE);
-
-		if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 0)
-			player->rotation += player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
-
-		else if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 1)
-			player->rotation -= player->turnSpeed * (player->velocity.y / player->maxSpeed) * dt;
-	}
-
-	Vector2 secondSideButtonStartingPosition = { WINDOW_WIDTH - 210, WINDOW_HEIGHT - (buttonSize + 40) };
-	char *secondSideButtonText[] = { "Down", "Up" };
-
-	for (int i = 0; i < sizeof(secondSideButtonText) / 8; ++i)
-	{
-		Rectangle button = { 
-			secondSideButtonStartingPosition.x + ((buttonSize + 10) * i), 
-			secondSideButtonStartingPosition.y,
-			buttonSize, buttonSize
-		};
-
-		DrawRectangleRounded(button, .2f, 10, BLACK);
-		DrawText(secondSideButtonText[i], button.x + 25, button.y + 30, 15, RAYWHITE);
-
-		if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 0)
-			player->velocity.y += player->braking * dt;
-
-		else if (CheckMouseOrTouchClicked(button, MOUSE_LEFT_BUTTON) && i == 1)
-			player->velocity.y += -player->acceleration * dt;
-
-		else player->velocity = Vector2Scale(player->velocity, player->friction);
-	}
-#endif
-
-	player->velocity = Vector2ClampValue(player->velocity, 0, player->maxSpeed);
-	player->position.x += player->velocity.y * cosf(player->rotation * DEG2RAD);
-	player->position.y += player->velocity.y * sinf(player->rotation * DEG2RAD);
-}
-
-void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, int width, int height)
+void UpdateCameraCenterSmoothFollow(Camera2D *camera, Player *player, float delta, int width, int height)
 {
 	static float minSpeed = 30;
 	static float minEffectLength = 10;
@@ -295,8 +219,8 @@ void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, 
 
 	float halfW = width / 2.0f;
 	float halfH = height / 2.0f;
-	float halfPW = player->rectSize.x / 2.0f;
-	float halfPH = player->rectSize.y / 2.0f;
+	float halfPW = player->size.x / 2.0f;
+	float halfPH = player->size.y / 2.0f;
 
 	camera->offset = (Vector2){ halfW - halfPW, halfH - halfPH };
 
@@ -310,7 +234,7 @@ void UpdateCameraCenterSmoothFollow(Camera2D *camera, Car *player, float delta, 
 	}
 }
 
-void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, int width, int height)
+void UpdateCameraPlayerBoundsPush(Camera2D *camera, Player *player, float delta, int width, int height)
 {
 	static Vector2 bbox = { 0.2f, 0.2f };
 
@@ -324,7 +248,7 @@ void UpdateCameraPlayerBoundsPush(Camera2D *camera, Car *player, float delta, in
 	if (player->position.y > bboxWorldMax.y) camera->target.y = bboxWorldMin.y + (player->position.y - bboxWorldMax.y);
 }
 
-void UpdateCameraCenter(Camera2D *camera, Car *player, float delta, int width, int height)
+void UpdateCameraCenter(Camera2D *camera, Player *player, float delta, int width, int height)
 {
     camera->offset = (Vector2){ width/2.0f, height/2.0f };
     camera->target = player->position;
@@ -342,10 +266,68 @@ void resolve_updates()
 			{
 				players[buffer->id].position.x = buffer->position[0];
 				players[buffer->id].position.y = buffer->position[1];
-				players[buffer->id].rotation = buffer->rotation;
+				players[buffer->id].angle = buffer->rotation;
 			}
 		}
 	}
 
 	recvpackets_index = 0;
+}
+
+void UpdateCar(Player *car, float deltaTime) {
+    const float carAcceleration = 200.0f;
+    const float carFriction = 0.02f;
+    const float carHandbrakeFriction = 0.1f;
+    const float carMaxSpeed = 200.0f;
+    const float carMaxAngularVelocity = 300.0f;
+    const float turningSpeed = 100.0f;
+
+    Vector2 acceleration = { 0, 0 };
+
+    if (IsKeyDown(KEY_UP)) {
+        acceleration.x += cosf(DEG2RAD * car->angle) * carAcceleration * deltaTime;
+        acceleration.y += sinf(DEG2RAD * car->angle) * carAcceleration * deltaTime;
+    }
+    if (IsKeyDown(KEY_DOWN)) {
+        acceleration.x -= cosf(DEG2RAD * car->angle) * carAcceleration * deltaTime;
+        acceleration.y -= sinf(DEG2RAD * car->angle) * carAcceleration * deltaTime;
+    }
+    if (IsKeyDown(KEY_LEFT)) {
+        car->angularVelocity -= turningSpeed * deltaTime;
+    }
+    if (IsKeyDown(KEY_RIGHT)) {
+        car->angularVelocity += turningSpeed * deltaTime;
+    }
+
+    // Apply acceleration
+    car->velocity.x += acceleration.x;
+    car->velocity.y += acceleration.y;
+
+    // Apply friction
+    car->velocity.x *= (1 - carFriction);
+    car->velocity.y *= (1 - carFriction);
+
+    // Apply handbrake friction if handbrake is engaged
+    if (IsKeyDown(KEY_SPACE)) {
+        car->velocity.x *= (1 - carHandbrakeFriction);
+        car->velocity.y *= (1 - carHandbrakeFriction);
+        car->angularVelocity *= 1.1f;  // Increase angular velocity for dramatic handbrake turns
+    } else {
+        car->angularVelocity *= 0.9f;  // Natural angular deceleration
+    }
+
+    // Cap speeds
+    if (Vector2Length(car->velocity) > carMaxSpeed) {
+        Vector2Scale(car->velocity, carMaxSpeed / Vector2Length(car->velocity));
+    }
+    if (fabsf(car->angularVelocity) > carMaxAngularVelocity) {
+        car->angularVelocity = carMaxAngularVelocity * (car->angularVelocity > 0 ? 1 : -1);
+    }
+
+    // Update car position and angle
+    car->position.x += car->velocity.x * deltaTime;
+    car->position.y += car->velocity.y * deltaTime;
+    car->angle += car->angularVelocity * deltaTime;
+
+		printf("%f, %f\n", car->position.x, car->position.y);
 }
